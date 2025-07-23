@@ -1,0 +1,736 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Student Management
+model Student {
+  id                      Int                 @id @default(autoincrement())
+  name                    String
+  email                   String              @unique
+  password_hash           String              // Non-nullable, as it's always generated
+  is_admin                Boolean             @default(false)
+  level                   String              @default("A1")
+  enrollment_date         DateTime            @default(now()) // Auto-set on creation
+  last_active             DateTime            @default(now())  // Auto-set on creation/update
+  total_time_spent        String              @default("0h 0m")
+  streak                  Int                 @default(0)
+  achievements            String[]            @default([]) // Array of strings
+  status                  String              @default("active")
+   progress                Int                 @default(0) 
+  exam_status             String?             @default("not_taken")
+  exam_score              Int?                @default(0)
+  exam_attempts           Int?                @default(0)
+  subscription            String?             @default("Free")
+  subscription_status     String?             @default("free")
+  subscription_date       DateTime?
+  phone                   String?
+  date_of_birth           DateTime?
+  country                 String?
+  preferred_language      String?             @default("English")
+  notes                   String?
+  created_at              DateTime            @default(now()) // Added for completeness
+  updated_at              DateTime            @updatedAt     // Added for completeness
+
+  student_modules         StudentModule[]
+  student_exam_attempts   StudentExamAttempt[]
+  certificates            Certificate[]
+  audit_logs              AuditLog[]
+
+  @@index([email])
+  @@index([status])
+  @@index([subscription])
+}
+
+model StudentModule {
+  id           Int      @id @default(autoincrement())
+  student_id   Int      // FIXED: Changed from String to Int to match Student.id
+  module_id    Int
+  progress     Int      @default(0) // FIXED: Added progress field
+  status       String   @default("not_started")
+  completed_at DateTime? // Added '?' as it might not be completed immediately
+  student      Student  @relation(fields: [student_id], references: [id], onDelete: Cascade)
+  module       Module   @relation(fields: [module_id], references: [id], onDelete: Cascade)
+
+  @@unique([student_id, module_id])
+  @@index([student_id])
+  @@index([module_id])
+   @@index([status]) 
+}
+
+// Exam Management
+model ExamTemplate {
+  id                Int      @id @default(autoincrement())
+  title             String
+  description       String?
+  instructions      String?
+  total_points      Int      @default(0)
+  passing_score     Int      @default(70)
+  time_limit        Int      @default(120)
+  settings          Json     @default("{}") // Stores the nested settings object
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+  is_active         Boolean  @default(false)
+  is_published      Boolean  @default(false)
+  exam_sections     ExamSection[]
+  student_exam_attempts StudentExamAttempt[]
+  certificates      Certificate[]
+
+  @@index([is_active])
+  @@index([is_published])
+}
+
+model ExamSection {
+  id                Int           @id @default(autoincrement())
+  exam_template_id  Int           // Foreign key to ExamTemplate
+  title             String
+  description       String?
+  instructions      String?
+  time_limit        Int?
+  max_points        Int           @default(0)
+  randomize_questions Boolean     @default(false)
+  passing_score     Int?
+  exam_template     ExamTemplate  @relation(fields: [exam_template_id], references: [id], onDelete: Cascade)
+  exam_questions    ExamQuestion[]
+  created_at        DateTime      @default(now()) // Added for tracking
+  updated_at        DateTime      @updatedAt     // Added for tracking
+
+  @@index([exam_template_id])
+}
+
+model ExamQuestion {
+  id             Int         @id @default(autoincrement())
+  section_id     Int         // Foreign key to ExamSection
+  type           String      // "multiple-choice", "fill-blank", etc.
+  question       String
+  question_ru    String?     // Added for localization if needed
+  options        Json?       // Stores array of strings for multiple-choice, matching, ordering
+  correct_answer Json        // Stores correct answer(s) - string, boolean, or string[]
+  points         Int         @default(1)
+  hint           String?
+  explanation    String?
+  module_id      Int?        // Optional foreign key to Module
+  difficulty     String      @default("medium")
+  tags           String[]    @default([]) // Stores array of strings
+  section        ExamSection @relation(fields: [section_id], references: [id], onDelete: Cascade)
+  module         Module?     @relation(fields: [module_id], references: [id], onDelete: SetNull)
+  created_at     DateTime    @default(now()) // Added for tracking
+  updated_at     DateTime    @updatedAt     // Added for tracking
+
+  @@index([section_id])
+  @@index([module_id])
+}
+
+model StudentExamAttempt {
+  id                 Int      @id @default(autoincrement()) // Changed from String to Int
+  student_id         Int      // FIXED: Changed from String to Int
+  exam_template_id   Int      // FIXED: Changed from String to Int
+  attempt_number     Int
+  score              Int
+  total_points       Int
+  percentage         Int
+  passed             Boolean
+  completed_at       DateTime
+  time_spent         Int
+  answers            Json
+  section_scores     Json
+  certificate_issued Boolean  @default(false)
+  student            Student  @relation(fields: [student_id], references: [id], onDelete: Cascade)
+  exam_template      ExamTemplate @relation(fields: [exam_template_id], references: [id], onDelete: Cascade)
+
+  @@index([student_id])
+  @@index([exam_template_id])
+}
+
+model Certificate {
+  id                Int       @id @default(autoincrement()) // Changed from String to Int
+  student_id        Int       // FIXED: Changed from String to Int
+  exam_template_id  Int?      // FIXED: Changed from String to Int
+  score             Int
+  completed_modules Int
+  completed_at      DateTime
+  generated_at      DateTime
+  certificate_number String   @unique
+  student           Student   @relation(fields: [student_id], references: [id], onDelete: Cascade)
+  exam_template     ExamTemplate? @relation(fields: [exam_template_id], references: [id], onDelete: SetNull)
+
+  @@index([student_id])
+  @@index([exam_template_id])
+}
+
+model CertificateSettings {
+  id                      Int      @id @default(autoincrement())
+  title                   String
+  subtitle                String
+  description             String
+  cefr_level              String
+  institution_name        String
+  institution_subtitle    String
+  signatory_name          String
+  signatory_title         String
+  auto_generate           Boolean  @default(true)
+  email_delivery          Boolean  @default(false)
+  template                String   @default("default")
+   created_at              DateTime @default(now())
+  updated_at              DateTime @updatedAt
+}
+
+// Exam Requirements
+model ExamRequirement {
+  id                      Int      @id @default(autoincrement())
+  require_all_modules     Boolean  @default(true)
+  min_modules_required    Int      @default(10)
+}
+
+// Module Management
+model Module {
+  id                        Int      @id @default(autoincrement())
+  title                     String
+  title_ru                  String?
+  subtitle                  String?
+  subtitle_ru               String?
+  level                     String   @default("A1")
+  duration                  String   @default("3 hours")
+  description               String?
+  description_ru            String?
+  location                  String?
+  region                    String?  @default("Estonia")
+  video_url                 String?
+  map_position_x            Float    @default(58)
+  map_position_y            Float    @default(24)
+  student_modules           StudentModule[]
+  exam_questions            ExamQuestion[]
+  module_stories            ModuleStory[]
+  module_vocabulary         ModuleVocabulary[]
+  module_grammar            ModuleGrammar[]
+  module_pronunciation      ModulePronunciation[]
+  module_listening          ModuleListening[]
+  module_speaking           ModuleSpeaking[]
+  module_reading            ModuleReading[]
+  module_writing            ModuleWriting[]
+  module_cultural           ModuleCultural[]
+  module_quizzes            ModuleQuiz[]
+  module_mission_challenges ModuleMissionChallenge[]
+  moduleStoryCharacters     ModuleStoryCharacter[]
+}
+
+model ModuleStory {
+  id               Int      @id @default(autoincrement())
+  module_id        Int
+  text             String
+  text_ru          String?
+  hint             String?
+  hint_ru          String?
+  mission          String
+  mission_ru       String?
+  show_translation Boolean  @default(false)
+  video_url        String?
+  module           Module   @relation(fields: [module_id], references: [id], onDelete: Cascade)
+
+  @@index([module_id])
+}
+
+model ModuleStoryCharacter {
+  id             Int    @id @default(autoincrement())
+  module_id      Int
+  character_name String
+  position       Int
+  module         Module @relation(fields: [module_id], references: [id], onDelete: Cascade)
+
+  @@index([module_id])
+}
+
+model ModuleVocabulary {
+  id             Int      @id @default(autoincrement())
+  module_id      Int
+  word           String
+  translation    String
+  translation_ru String?
+  example        String?
+  example_ru     String?
+  audio_url      String?
+  position       Int
+  module         Module   @relation(fields: [module_id], references: [id], onDelete: Cascade)
+
+  @@index([module_id])
+}
+
+model ModuleGrammar {
+  id             Int               @id @default(autoincrement())
+  module_id      Int
+  title          String
+  title_ru       String?
+  explanation    String
+  explanation_ru String?
+  module         Module            @relation(fields: [module_id], references: [id], onDelete: Cascade)
+  grammar_rules  ModuleGrammarRule[]
+  grammar_examples ModuleGrammarExample[]
+  grammar_exercises ModuleGrammarExercise[]
+
+  @@index([module_id])
+}
+
+model ModuleGrammarRule {
+  id         Int         @id @default(autoincrement())
+  grammar_id Int
+  rule       String
+  rule_ru    String?
+  position   Int
+  grammar    ModuleGrammar @relation(fields: [grammar_id], references: [id], onDelete: Cascade)
+
+  @@index([grammar_id])
+}
+
+model ModuleGrammarExample {
+  id             Int         @id @default(autoincrement())
+  grammar_id     Int
+  sentence       String
+  sentence_ru    String?
+  translation    String
+  translation_ru String?
+  position       Int
+  grammar        ModuleGrammar @relation(fields: [grammar_id], references: [id], onDelete: Cascade)
+
+  @@index([grammar_id])
+}
+
+model ModuleGrammarExercise {
+  id             Int                         @id @default(autoincrement())
+  grammar_id     Int
+  type           String
+  question       String
+  question_ru    String?
+  answer         String
+  hint           String?
+  hint_ru        String?
+  position       Int
+  grammar        ModuleGrammar               @relation(fields: [grammar_id], references: [id], onDelete: Cascade)
+  exercise_options ModuleGrammarExerciseOption[]
+
+  @@index([grammar_id])
+}
+
+model ModuleGrammarExerciseOption {
+  id             Int                   @id @default(autoincrement())
+  exercise_id    Int
+  option_text    String
+  option_text_ru String?
+  position       Int
+  exercise       ModuleGrammarExercise @relation(fields: [exercise_id], references: [id], onDelete: Cascade)
+
+  @@index([exercise_id])
+}
+
+model ModulePronunciation {
+  id             Int                        @id @default(autoincrement())
+  module_id      Int
+  focus          String
+  focus_ru       String?
+  content        String
+  content_ru     String?
+  hint           String?
+  hint_ru        String?
+  module         Module                     @relation(fields: [module_id], references: [id], onDelete: Cascade)
+  minimal_pairs  ModulePronunciationMinimalPair[]
+  exercises      ModulePronunciationExercise[]
+
+  @@index([module_id])
+}
+
+model ModulePronunciationMinimalPair {
+  id               Int               @id @default(autoincrement())
+  pronunciation_id Int
+  word1            String
+  word2            String
+  sound1           String? // Added '?' as it was missing in frontend type, assuming it can be null
+  sound2           String? // Added '?'
+  audio_url1       String?
+  audio_url2       String?
+  position         Int
+  pronunciation    ModulePronunciation @relation(fields: [pronunciation_id], references: [id], onDelete: Cascade)
+
+  @@index([pronunciation_id])
+}
+
+model ModulePronunciationExercise {
+  id               Int                 @id @default(autoincrement())
+  pronunciation_id Int
+  type             String
+  word             String
+  phonetic         String? // Added '?'
+  audio_url        String?
+  hint             String?
+  hint_ru          String?
+  position         Int
+  pronunciation    ModulePronunciation @relation(fields: [pronunciation_id], references: [id], onDelete: Cascade)
+
+  @@index([pronunciation_id])
+}
+
+model ModuleListening {
+  id             Int                     @id @default(autoincrement())
+  module_id      Int
+  audio_url      String
+  transcript     String
+  transcript_ru  String?
+  content        String
+  content_ru     String?
+  hint           String?
+  hint_ru        String?
+  module         Module                  @relation(fields: [module_id], references: [id], onDelete: Cascade)
+  questions      ModuleListeningQuestion[]
+
+  @@index([module_id])
+}
+
+model ModuleListeningQuestion {
+  id           Int                           @id @default(autoincrement())
+  listening_id Int
+  type         String
+  question     String
+  question_ru  String?
+  answer       String
+  position     Int
+  listening    ModuleListening               @relation(fields: [listening_id], references: [id], onDelete: Cascade)
+  options      ModuleListeningQuestionOption[]
+
+  @@index([listening_id])
+}
+
+model ModuleListeningQuestionOption {
+  id          Int                     @id @default(autoincrement())
+  question_id Int
+  option_text String
+  option_text_ru String?
+  position    Int
+  question    ModuleListeningQuestion @relation(fields: [question_id], references: [id], onDelete: Cascade)
+
+  @@index([question_id])
+}
+
+model ModuleSpeaking {
+  id         Int                    @id @default(autoincrement())
+  module_id  Int
+  content    String
+  content_ru String?
+  hint       String?
+  hint_ru    String?
+  module     Module                 @relation(fields: [module_id], references: [id], onDelete: Cascade)
+  exercises  ModuleSpeakingExercise[]
+
+  @@index([module_id])
+}
+
+model ModuleSpeakingExercise {
+  id                Int            @id @default(autoincrement())
+  speaking_id       Int
+  type              String
+  prompt            String
+  prompt_ru         String?
+  expected_response String
+  hint              String?
+  hint_ru           String?
+  position          Int
+  speaking          ModuleSpeaking @relation(fields: [speaking_id], references: [id], onDelete: Cascade)
+
+  @@index([speaking_id])
+}
+
+model ModuleReading {
+  id         Int                   @id @default(autoincrement())
+  module_id  Int
+  text       String
+  text_ru    String?
+  hint       String?
+  hint_ru    String?
+  module     Module                @relation(fields: [module_id], references: [id], onDelete: Cascade)
+  questions  ModuleReadingQuestion[]
+
+  @@index([module_id])
+}
+
+model ModuleReadingQuestion {
+  id          Int                         @id @default(autoincrement())
+  reading_id  Int
+  type        String
+  question    String
+  question_ru String?
+  answer      String
+  position    Int
+  reading     ModuleReading               @relation(fields: [reading_id], references: [id], onDelete: Cascade)
+  options     ModuleReadingQuestionOption[]
+
+  @@index([reading_id])
+}
+
+model ModuleReadingQuestionOption {
+  id          Int                     @id @default(autoincrement())
+  question_id Int
+  option_text String
+  option_text_ru String?
+  position    Int
+  question    ModuleReadingQuestion @relation(fields: [question_id], references: [id], onDelete: Cascade)
+
+  @@index([question_id])
+}
+
+model ModuleWriting {
+  id         Int                   @id @default(autoincrement())
+  module_id  Int
+  content    String
+  content_ru String?
+  hint       String?
+  hint_ru    String?
+  module     Module                @relation(fields: [module_id], references: [id], onDelete: Cascade)
+  exercises  ModuleWritingExercise[]
+
+  @@index([module_id])
+}
+
+model ModuleWritingExercise {
+  id          Int           @id @default(autoincrement())
+  writing_id  Int
+  type        String
+  prompt      String
+  prompt_ru   String?
+  min_words   Int
+  max_words   Int
+  hint        String?
+  hint_ru     String?
+  position    Int
+  writing     ModuleWriting @relation(fields: [writing_id], references: [id], onDelete: Cascade)
+
+  @@index([writing_id])
+}
+
+model ModuleCultural {
+  id                      Int      @id @default(autoincrement())
+  module_id               Int
+  title                   String
+  title_ru                String?
+  content                 String
+  content_ru              String?
+  souvenir_name           String
+  souvenir_name_ru        String?
+  souvenir_description    String
+  souvenir_description_ru String?
+  souvenir_download_url   String?
+  hint                    String?
+  hint_ru                 String?
+  module                  Module   @relation(fields: [module_id], references: [id], onDelete: Cascade)
+
+  @@index([module_id])
+}
+
+model ModuleQuiz {
+  id          Int            @id @default(autoincrement())
+  module_id   Int
+  type        String
+  question    String
+  question_ru String?
+  answer      String
+  hint        String?
+  hint_ru     String?
+  audio_url   String?
+  position    Int
+  module      Module         @relation(fields: [module_id], references: [id], onDelete: Cascade)
+  options     ModuleQuizOption[]
+
+  @@index([module_id])
+}
+
+model ModuleQuizOption {
+  id             Int        @id @default(autoincrement())
+  quiz_id        Int
+  option_text    String
+  option_text_ru String?
+  position       Int
+  quiz           ModuleQuiz @relation(fields: [quiz_id], references: [id], onDelete: Cascade)
+
+  @@index([quiz_id])
+}
+
+model ModuleMissionChallenge {
+  id                 Int                      @id @default(autoincrement())
+  module_id          Int
+  title              String
+  title_ru           String?
+  description        String
+  description_ru     String?
+  hint               String?
+  hint_ru            String?
+  module             Module                   @relation(fields: [module_id], references: [id], onDelete: Cascade)
+  requirements       ModuleMissionRequirement[]
+
+  @@index([module_id])
+}
+
+model ModuleMissionRequirement {
+  id                   Int                    @id @default(autoincrement())
+  mission_challenge_id Int
+  requirement          String
+  requirement_ru       String?
+  position             Int
+  mission_challenge    ModuleMissionChallenge @relation(fields: [mission_challenge_id], references: [id], onDelete: Cascade)
+
+  @@index([mission_challenge_id])
+}
+
+// Email and Notifications
+model EmailTemplate {
+  id          Int      @id @default(autoincrement())
+  name        String
+  subject     String
+  content     String
+  category    String
+  created_at  DateTime @default(now()) // Added default
+  updated_at  DateTime @updatedAt     // Added default
+  email_history EmailHistory[]
+
+  @@index([category])
+}
+
+model EmailDraft {
+  id                   Int       @id @default(autoincrement())
+  subject              String?
+  content              String?
+  to_emails            String?   @default("[]") // Store as JSON string of emails
+  cc_emails            String?   @default("[]")
+  bcc_emails           String?   @default("[]")
+  priority             String    @default("normal")
+  schedule_date        DateTime?
+  schedule_time        String?   // Store time as string (e.g., "HH:MM")
+  use_template         Boolean   @default(false)
+  selected_template_id Int?      // Link to EmailTemplate if needed (Int ID)
+  personalize_content  Boolean   @default(true)
+  created_at           DateTime  @default(now())
+  updated_at           DateTime  @updatedAt
+  // userId               Int?      @map("user_id") // If drafts are per user
+  // user                 Student?  @relation(fields: [userId], references: [id])
+}
+model EmailHistory {
+  id               Int       @id @default(autoincrement()) // Changed from String to Int
+  template_id      Int?      // FIXED: Changed from String to Int
+  to_emails        String
+  cc_emails        String?
+  bcc_emails       String?
+  subject          String
+  content          String
+  priority         String    @default("normal")
+  status           String
+  recipients_count Int
+  sent_at          DateTime?
+  scheduled_at     DateTime?
+  created_at       DateTime @default(now()) // Added default
+  template         EmailTemplate? @relation(fields: [template_id], references: [id], onDelete: SetNull)
+
+  @@index([template_id])
+  @@index([status])
+  @@index([scheduled_at])
+}
+
+model NotificationSettings {
+  id                               Int      @id @default(autoincrement())
+  welcome_email_enabled            Boolean  @default(true)
+  inactivity_reminder_enabled      Boolean  @default(false)
+  achievement_notification_enabled Boolean  @default(true)
+  notify_on_module_completion      Boolean  @default(false)
+  enable_push_notifications        Boolean  @default(true)
+  enable_email_notifications       Boolean  @default(true)
+  enable_sms_notifications         Boolean  @default(false)
+  notify_on_new_registration       Boolean  @default(true)
+  notify_on_exam_completion        Boolean  @default(true)
+  notify_on_system_errors          Boolean  @default(true)
+  admin_notification_email         String
+  updated_at                       DateTime @updatedAt // Added default
+}
+
+model GeneralSettings {
+  id                     Int      @id @default(autoincrement())
+  app_name               String
+  app_description        String
+  support_email          String
+  default_language       String
+  timezone               String
+  maintenance_mode       Boolean  @default(false)
+  registration_enabled   Boolean  @default(true)
+  guest_access_enabled   Boolean  @default(true)
+  max_students_per_class Int      @default(30)
+  session_timeout        Int      @default(60)
+  updated_at             DateTime @updatedAt // Added default
+}
+
+model EmailSettings {
+  id                        Int      @id @default(autoincrement())
+  smtp_host                 String?
+  smtp_port                 Int      @default(587)
+  smtp_username             String?
+  smtp_password             String?
+  from_email                String
+  from_name                 String
+  enable_welcome_emails     Boolean  @default(true)
+  enable_progress_emails    Boolean  @default(true)
+  enable_certificate_emails Boolean  @default(true)
+  enable_reminder_emails    Boolean  @default(false)
+  email_frequency           String   @default("weekly")
+  updated_at                DateTime @updatedAt // Added default
+}
+
+model SecuritySettings {
+  id                      Int      @id @default(autoincrement())
+  password_min_length     Int      @default(8)
+  require_special_chars   Boolean  @default(true)
+  require_numbers         Boolean  @default(true)
+  require_uppercase       Boolean  @default(true)
+  enable_two_factor       Boolean  @default(false)
+  session_security        String   @default("standard")
+  ip_whitelist            String[] @default([])
+  max_login_attempts      Int      @default(5)
+  lockout_duration        Int      @default(15)
+  enable_audit_log        Boolean  @default(true)
+  updated_at              DateTime @updatedAt // Added default
+}
+
+model SystemSettings {
+  id                     Int      @id @default(autoincrement())
+  backup_frequency       String   @default("daily")
+  retention_period       Int      @default(30)
+  enable_analytics       Boolean  @default(true)
+  enable_error_reporting Boolean  @default(true)
+  debug_mode             Boolean  @default(false)
+  cache_enabled          Boolean  @default(true)
+  compression_enabled    Boolean  @default(true)
+  max_file_upload_size   Int      @default(10)
+  subscription_enabled   Boolean  @default(true)
+  free_module_limit      Int      @default(10)
+  premium_required       Boolean  @default(true)
+  updated_at             DateTime @updatedAt // Added default
+}
+
+model Backup {
+  id          Int      @id @default(autoincrement()) // Changed from String to Int
+  backup_date DateTime
+  file_name   String
+  file_size   Int
+  created_at  DateTime @default(now()) // Added default
+
+  @@index([backup_date])
+}
+
+model AuditLog {
+  id        Int       @id @default(autoincrement())
+  action    String
+  user_id   Int?      // FIXED: Changed from String to Int
+  timestamp DateTime  @default(now()) // Added default
+  details   String?
+  user      Student?  @relation(fields: [user_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id])
+  @@index([timestamp])
+}
