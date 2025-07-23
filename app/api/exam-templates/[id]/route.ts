@@ -3,18 +3,21 @@ import { PrismaClient } from '@/lib/generated/prisma';
 
 const prisma = new PrismaClient();
 
+// Helper to parse template ID from request URL
+function getTemplateIdFromRequest(request: Request): number | null {
+  const url = new URL(request.url);
+  const segments = url.pathname.split('/');
+  const id = segments[segments.length - 1];
+  const templateId = parseInt(id, 10);
+  return isNaN(templateId) ? null : templateId;
+}
+
 // GET handler to fetch a single exam template
-export async function GET(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
+export async function GET(request: Request) {
   try {
-    const templateId = parseInt(params.id, 10);
-    if (isNaN(templateId)) {
-      return NextResponse.json(
-        { message: 'Invalid exam template ID' },
-        { status: 400 }
-      );
+    const templateId = getTemplateIdFromRequest(request);
+    if (templateId === null) {
+      return NextResponse.json({ message: 'Invalid exam template ID' }, { status: 400 });
     }
 
     const template = await prisma.examTemplate.findUnique({
@@ -46,10 +49,7 @@ export async function GET(
     });
 
     if (!template) {
-      return NextResponse.json(
-        { message: 'Exam template not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ message: 'Exam template not found' }, { status: 404 });
     }
 
     const formattedTemplate = {
@@ -65,16 +65,16 @@ export async function GET(
       createdAt: template.created_at.toISOString(),
       updatedAt: template.updated_at.toISOString(),
       settings: template.settings as any,
-      sections: template.exam_sections.map((section) => ({
+      sections: template.exam_sections.map(section => ({
         id: section.id.toString(),
         title: section.title,
         description: section.description || '',
         instructions: section.instructions || '',
-        timeLimit: section.time_limit ?? undefined,
+        timeLimit: section.time_limit || undefined,
         maxPoints: section.max_points,
         randomizeQuestions: section.randomize_questions,
-        passingScore: section.passing_score ?? undefined,
-        questions: section.exam_questions.map((question) => ({
+        passingScore: section.passing_score || undefined,
+        questions: section.exam_questions.map(question => ({
           id: question.id.toString(),
           type: question.type as any,
           question: question.question,
@@ -93,7 +93,7 @@ export async function GET(
 
     return NextResponse.json(formattedTemplate);
   } catch (error) {
-    console.error(`Error fetching exam template ${params.id}:`, error);
+    console.error(`Error fetching exam template:`, error);
     return NextResponse.json(
       { message: 'Failed to fetch exam template.', error: (error as Error).message },
       { status: 500 }
@@ -101,57 +101,30 @@ export async function GET(
   }
 }
 
-// PUT handler to update an exam template
-export async function PUT(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
+// PUT handler to update an exam template (for editing/saving drafts)
+export async function PUT(request: Request) {
   try {
-    const templateId = parseInt(params.id, 10);
-    if (isNaN(templateId)) {
-      return NextResponse.json(
-        { message: 'Invalid exam template ID' },
-        { status: 400 }
-      );
+    const templateId = getTemplateIdFromRequest(request);
+    if (templateId === null) {
+      return NextResponse.json({ message: 'Invalid exam template ID' }, { status: 400 });
     }
 
-    const {
-      title,
-      description,
-      instructions,
-      timeLimit,
-      sections,
-      settings,
-      isActive,
-      isPublished,
-      passingScore, // optionally accept this at root level (optional)
-    } = await request.json();
+    const { title, description, instructions, timeLimit, sections, settings, isActive, isPublished } = await request.json();
 
-    if (!title || !Array.isArray(sections) || sections.length === 0) {
-      return NextResponse.json(
-        { message: 'Exam title and at least one section are required.' },
-        { status: 400 }
-      );
+    if (!title || !sections || sections.length === 0) {
+      return NextResponse.json({ message: 'Exam title and at least one section are required.' }, { status: 400 });
     }
 
-    // Calculate total points from sections
-    const totalPoints = sections.reduce(
-      (sum: number, section: any) => sum + (section.maxPoints || 0),
-      0
-    );
-
-    // Transaction to update template, sections, and questions
     const updatedExamTemplate = await prisma.$transaction(async (tx) => {
-      // Update main exam template record
       const updatedTemplate = await tx.examTemplate.update({
         where: { id: templateId },
         data: {
           title,
           description: description || null,
           instructions: instructions || null,
-          total_points: totalPoints,
+          total_points: sections.reduce((sum: number, section: any) => sum + (section.maxPoints || 0), 0),
           time_limit: timeLimit || 120,
-          passing_score: passingScore ?? settings?.passingScore ?? 70,
+          passing_score: settings.passingScore || 70,
           settings: settings || {},
           is_active: isActive ?? false,
           is_published: isPublished ?? false,
@@ -159,26 +132,21 @@ export async function PUT(
         },
       });
 
-      // Find existing section IDs
-      const existingSections = await tx.examSection.findMany({
+      const existingSectionIds = await tx.examSection.findMany({
         where: { exam_template_id: templateId },
-        select: { id: true },
+        select: { id: true }
       });
-      const existingSectionIds = existingSections.map((s) => s.id);
+      const sectionIdsToDelete = existingSectionIds.map(s => s.id);
 
-      // Delete all questions of existing sections
-      if (existingSectionIds.length > 0) {
+      if (sectionIdsToDelete.length > 0) {
         await tx.examQuestion.deleteMany({
-          where: { section_id: { in: existingSectionIds } },
+          where: { section_id: { in: sectionIdsToDelete } }
         });
       }
-
-      // Delete all existing sections for this template
       await tx.examSection.deleteMany({
-        where: { exam_template_id: templateId },
+        where: { exam_template_id: templateId }
       });
 
-      // Create new sections and their questions
       for (const sectionData of sections) {
         const createdSection = await tx.examSection.create({
           data: {
@@ -187,7 +155,7 @@ export async function PUT(
             description: sectionData.description || null,
             instructions: sectionData.instructions || null,
             time_limit: sectionData.timeLimit || null,
-            max_points: sectionData.maxPoints || 0,
+            max_points: sectionData.maxPoints,
             randomize_questions: sectionData.randomizeQuestions ?? false,
             passing_score: sectionData.passingScore || null,
             created_at: new Date(),
@@ -208,7 +176,7 @@ export async function PUT(
               hint: questionData.hint || null,
               explanation: questionData.explanation || null,
               module_id: questionData.module_id || null,
-              difficulty: questionData.difficulty || 'medium',
+              difficulty: questionData.difficulty || "medium",
               tags: questionData.tags || [],
               created_at: new Date(),
               updated_at: new Date(),
@@ -220,12 +188,10 @@ export async function PUT(
       return updatedTemplate;
     });
 
-    return NextResponse.json({
-      message: 'Exam template updated successfully!',
-      examTemplate: updatedExamTemplate,
-    });
+    return NextResponse.json({ message: 'Exam template updated successfully!', examTemplate: updatedExamTemplate });
+
   } catch (error) {
-    console.error(`Error updating exam template ${params.id}:`, error);
+    console.error(`Error updating exam template:`, error);
     return NextResponse.json(
       { message: 'Failed to update exam template.', error: (error as Error).message },
       { status: 500 }
