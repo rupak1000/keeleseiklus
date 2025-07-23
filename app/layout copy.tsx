@@ -10,7 +10,7 @@ const inter = Inter({ subsets: ["latin"] })
 export const metadata: Metadata = {
   title: "Keele Seiklus - Language Adventure",
   description: "Master languages through an immersive journey across 40 beautiful destinations",
-  generator: 'v0.dev'
+    generator: 'v0.dev'
 }
 
 export default function RootLayout({
@@ -20,7 +20,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={`${inter.className} expansion-alids-init`}>
+      <body className={inter.className}>
         <LanguageProvider>
           <Navigation />
           <main>{children}</main>

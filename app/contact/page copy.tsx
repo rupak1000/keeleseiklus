@@ -1,13 +1,14 @@
 "use client"
 
 import type React from "react"
+
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
-import { Mail, Phone, MapPin, Send, CheckCircle, AlertCircle } from "lucide-react"
+import { Mail, Phone, MapPin, Send, CheckCircle } from "lucide-react"
 import { useLanguage } from "@/contexts/language-context"
 
 export default function ContactPage() {
@@ -20,7 +21,6 @@ export default function ContactPage() {
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isSubmitted, setIsSubmitted] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
@@ -33,40 +33,34 @@ export default function ContactPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSubmitting(true)
-    setError(null)
 
-    try {
-      const response = await fetch('/api/contact', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
-      })
+    // Simulate form submission
+    await new Promise((resolve) => setTimeout(resolve, 2000))
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.details || errorData.error || t('contact.submitError'))
-      }
-
-      setIsSubmitting(false)
-      setIsSubmitted(true)
-
-      // Reset form after 3 seconds
-      setTimeout(() => {
-        setIsSubmitted(false)
-        setFormData({
-          name: "",
-          email: "",
-          subject: "",
-          message: "",
-        })
-      }, 3000)
-    } catch (err: any) {
-      console.error('Error submitting form:', err)
-      setError(err.message || t('contact.submitError'))
-      setIsSubmitting(false)
+    // Store the contact form submission (in a real app, this would go to a server)
+    const submissions = JSON.parse(localStorage.getItem("contactSubmissions") || "[]")
+    const newSubmission = {
+      ...formData,
+      id: Date.now(),
+      timestamp: new Date().toISOString(),
+      status: "new",
     }
+    submissions.push(newSubmission)
+    localStorage.setItem("contactSubmissions", JSON.stringify(submissions))
+
+    setIsSubmitting(false)
+    setIsSubmitted(true)
+
+    // Reset form after 3 seconds
+    setTimeout(() => {
+      setIsSubmitted(false)
+      setFormData({
+        name: "",
+        email: "",
+        subject: "",
+        message: "",
+      })
+    }, 3000)
   }
 
   if (isSubmitted) {
@@ -168,12 +162,6 @@ export default function ContactPage() {
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-6">
-                {error && (
-                  <div className="flex items-center gap-2 p-4 bg-red-50 text-red-700 rounded-lg">
-                    <AlertCircle className="w-5 h-5" />
-                    <span>{error}</span>
-                  </div>
-                )}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="name">{t("contact.nameRequired")}</Label>
