@@ -1,20 +1,14 @@
+// app/api/exam-templates/[id]/route.ts
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@/lib/generated/prisma';
 
 const prisma = new PrismaClient();
-
 // GET handler to fetch a single exam template
-export async function GET(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
+export async function GET(request: Request, { params }: { params: { id: string } }) {
   try {
     const templateId = parseInt(params.id, 10);
     if (isNaN(templateId)) {
-      return NextResponse.json(
-        { message: 'Invalid exam template ID' },
-        { status: 400 }
-      );
+      return NextResponse.json({ message: 'Invalid exam template ID' }, { status: 400 });
     }
 
     const template = await prisma.examTemplate.findUnique({
@@ -23,7 +17,7 @@ export async function GET(
         exam_sections: {
           include: {
             exam_questions: {
-              select: {
+              select: { // Select all fields needed for editing questions
                 id: true,
                 type: true,
                 question: true,
@@ -37,21 +31,19 @@ export async function GET(
                 difficulty: true,
                 tags: true,
               },
-              orderBy: { id: 'asc' },
-            },
+              orderBy: { id: 'asc' } // Order questions for consistent editing
+            }
           },
-          orderBy: { id: 'asc' },
-        },
-      },
+          orderBy: { id: 'asc' } // Order sections for consistent editing
+        }
+      }
     });
 
     if (!template) {
-      return NextResponse.json(
-        { message: 'Exam template not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ message: 'Exam template not found' }, { status: 404 });
     }
 
+    // Transform data from DB snake_case and JSON to frontend camelCase and proper types
     const formattedTemplate = {
       id: template.id,
       title: template.title,
@@ -64,31 +56,31 @@ export async function GET(
       isActive: template.is_active,
       createdAt: template.created_at.toISOString(),
       updatedAt: template.updated_at.toISOString(),
-      settings: template.settings as any,
-      sections: template.exam_sections.map((section) => ({
-        id: section.id.toString(),
+      settings: template.settings as any, // Cast JSON directly to frontend settings interface
+      sections: template.exam_sections.map(section => ({
+        id: section.id.toString(), // Convert to string for frontend temporary IDs
         title: section.title,
         description: section.description || '',
         instructions: section.instructions || '',
-        timeLimit: section.time_limit ?? undefined,
+        timeLimit: section.time_limit || undefined,
         maxPoints: section.max_points,
         randomizeQuestions: section.randomize_questions,
-        passingScore: section.passing_score ?? undefined,
-        questions: section.exam_questions.map((question) => ({
-          id: question.id.toString(),
-          type: question.type as any,
+        passingScore: section.passing_score || undefined,
+        questions: section.exam_questions.map(question => ({
+          id: question.id.toString(), // Convert to string for frontend temporary IDs
+          type: question.type as any, // Cast string to specific question type enum
           question: question.question,
           question_ru: question.question_ru || undefined,
-          options: question.options ? (question.options as string[]) : undefined,
-          correctAnswer: question.correct_answer,
+          options: question.options ? (question.options as string[]) : undefined, // Cast JSON to string array
+          correctAnswer: question.correct_answer, // Keep as JSON, frontend handles type
           points: question.points,
           hint: question.hint || undefined,
           explanation: question.explanation || undefined,
           module_id: question.module_id || undefined,
-          difficulty: question.difficulty as any,
-          tags: question.tags ? (question.tags as string[]) : [],
-        })),
-      })),
+          difficulty: question.difficulty as any, // Cast string to difficulty enum
+          tags: question.tags ? (question.tags as string[]) : [], // Cast String[]
+        }))
+      }))
     };
 
     return NextResponse.json(formattedTemplate);
@@ -101,57 +93,33 @@ export async function GET(
   }
 }
 
-// PUT handler to update an exam template
-export async function PUT(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
+// PUT handler to update an exam template (for editing/saving drafts)
+export async function PUT(request: Request, { params }: { params: { id: string } }) {
   try {
     const templateId = parseInt(params.id, 10);
     if (isNaN(templateId)) {
-      return NextResponse.json(
-        { message: 'Invalid exam template ID' },
-        { status: 400 }
-      );
+      return NextResponse.json({ message: 'Invalid exam template ID' }, { status: 400 });
     }
 
-    const {
-      title,
-      description,
-      instructions,
-      timeLimit,
-      sections,
-      settings,
-      isActive,
-      isPublished,
-      passingScore, // optionally accept this at root level (optional)
-    } = await request.json();
+    const { title, description, instructions, timeLimit, sections, settings, isActive, isPublished } = await request.json();
 
-    if (!title || !Array.isArray(sections) || sections.length === 0) {
-      return NextResponse.json(
-        { message: 'Exam title and at least one section are required.' },
-        { status: 400 }
-      );
+    // Basic validation
+    if (!title || !sections || sections.length === 0) {
+      return NextResponse.json({ message: 'Exam title and at least one section are required.' }, { status: 400 });
     }
 
-    // Calculate total points from sections
-    const totalPoints = sections.reduce(
-      (sum: number, section: any) => sum + (section.maxPoints || 0),
-      0
-    );
-
-    // Transaction to update template, sections, and questions
+    // Use a Prisma transaction for atomicity
     const updatedExamTemplate = await prisma.$transaction(async (tx) => {
-      // Update main exam template record
+      // 1. Update the main ExamTemplate record
       const updatedTemplate = await tx.examTemplate.update({
         where: { id: templateId },
         data: {
           title,
           description: description || null,
           instructions: instructions || null,
-          total_points: totalPoints,
+          total_points: sections.reduce((sum: number, section: any) => sum + (section.maxPoints || 0), 0),
           time_limit: timeLimit || 120,
-          passing_score: passingScore ?? settings?.passingScore ?? 70,
+          passing_score: settings.passingScore || 70,
           settings: settings || {},
           is_active: isActive ?? false,
           is_published: isPublished ?? false,
@@ -159,26 +127,24 @@ export async function PUT(
         },
       });
 
-      // Find existing section IDs
-      const existingSections = await tx.examSection.findMany({
+      // 2. Handle ExamSections and their nested ExamQuestions (Delete all and recreate approach for simplicity)
+      // First, delete all existing questions for this template's sections
+      const existingSectionIds = await tx.examSection.findMany({
         where: { exam_template_id: templateId },
-        select: { id: true },
+        select: { id: true }
       });
-      const existingSectionIds = existingSections.map((s) => s.id);
-
-      // Delete all questions of existing sections
-      if (existingSectionIds.length > 0) {
+      const sectionIdsToDelete = existingSectionIds.map(s => s.id);
+      if (sectionIdsToDelete.length > 0) {
         await tx.examQuestion.deleteMany({
-          where: { section_id: { in: existingSectionIds } },
+          where: { section_id: { in: sectionIdsToDelete } }
         });
       }
-
-      // Delete all existing sections for this template
+      // Then, delete all existing sections for this template
       await tx.examSection.deleteMany({
-        where: { exam_template_id: templateId },
+        where: { exam_template_id: templateId }
       });
 
-      // Create new sections and their questions
+      // Now, recreate sections and questions based on the incoming data
       for (const sectionData of sections) {
         const createdSection = await tx.examSection.create({
           data: {
@@ -208,7 +174,7 @@ export async function PUT(
               hint: questionData.hint || null,
               explanation: questionData.explanation || null,
               module_id: questionData.module_id || null,
-              difficulty: questionData.difficulty || 'medium',
+              difficulty: questionData.difficulty || "medium",
               tags: questionData.tags || [],
               created_at: new Date(),
               updated_at: new Date(),
@@ -217,13 +183,11 @@ export async function PUT(
         }
       }
 
-      return updatedTemplate;
+      return updatedTemplate; // Return the updated exam template
     });
 
-    return NextResponse.json({
-      message: 'Exam template updated successfully!',
-      examTemplate: updatedExamTemplate,
-    });
+    return NextResponse.json({ message: 'Exam template updated successfully!', examTemplate: updatedExamTemplate });
+
   } catch (error) {
     console.error(`Error updating exam template ${params.id}:`, error);
     return NextResponse.json(
