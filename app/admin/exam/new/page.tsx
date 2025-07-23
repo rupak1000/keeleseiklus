@@ -1,16 +1,14 @@
-// app/admin/exam/new/page.tsx
-"use client";
-
-import { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+"use client"
+import { useState, useEffect } from "react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Badge } from "@/components/ui/badge"
+import { Switch } from "@/components/ui/switch"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,15 +19,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+} from "@/components/ui/alert-dialog"
 import {
   ArrowLeft,
   Plus,
@@ -42,73 +32,79 @@ import {
   BookOpen,
   CheckCircle,
   Settings,
-  RefreshCw, // For saving indicator
-} from "lucide-react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner"; // For notifications
+  RefreshCw,
+  AlertTriangle,
+  Volume2,
+  Upload,
+  Play,
+  Pause,
+} from "lucide-react"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 
 // Interfaces matching backend models for consistency
 interface ExamQuestion {
-  id: string; // Frontend uses string for temporary IDs
-  type: "multiple-choice" | "fill-blank" | "true-false" | "short-answer" | "essay" | "matching" | "ordering";
-  question: string;
-  question_ru?: string; // Add if you have this in DB
-  options?: string[]; // Stored as JSON in DB, handled as string array in frontend
-  correctAnswer: string | boolean | string[]; // Stored as JSON in DB
-  points: number;
-  hint?: string;
-  explanation?: string;
-  module_id?: number; // Matches DB field, optional
-  difficulty: "easy" | "medium" | "hard";
-  tags: string[]; // Stored as String[] in DB
+  id: string // Frontend uses string for temporary IDs
+  type: "multiple-choice" | "fill-blank" | "true-false" | "short-answer" | "essay" | "matching" | "ordering" | "audio"
+  question: string
+  question_ru?: string
+  options?: string[]
+  correctAnswer: string | boolean | number // Use number for multiple choice indices
+  points: number
+  hint?: string
+  explanation?: string
+  module_id?: number
+  difficulty: "easy" | "medium" | "hard"
+  tags: string[]
+  audioUrl?: string
 }
 
 interface ExamSection {
-  id: string; // Frontend uses string for temporary IDs
-  title: string;
-  description: string;
-  instructions?: string;
-  timeLimit?: number; // Optional
-  maxPoints: number; // Sum of question points in this section
-  questions: ExamQuestion[];
-  randomizeQuestions: boolean;
-  passingScore?: number; // Optional
+  id: string
+  title: string
+  description: string
+  instructions?: string
+  timeLimit?: number
+  maxPoints: number
+  questions: ExamQuestion[]
+  randomizeQuestions: boolean
+  passingScore?: number
 }
 
 interface ExamTemplate {
-  id: string; // Frontend uses string for temporary IDs
-  title: string;
-  description: string;
-  instructions: string;
-  totalPoints: number; // Sum of all section maxPoints
-  timeLimit: number;
-  sections: ExamSection[];
+  id: string
+  title: string
+  description: string
+  instructions: string
+  totalPoints: number
+  timeLimit: number
+  sections: ExamSection[]
   settings: {
-    randomizeQuestions: boolean;
-    randomizeSections: boolean;
-    showProgressBar: boolean;
-    allowBackNavigation: boolean;
-    showQuestionNumbers: boolean;
-    autoSave: boolean;
-    preventCheating: boolean;
-    fullScreenMode: boolean;
-    passingScore: number;
-    maxAttempts: number;
-    showResultsImmediately: boolean;
-    certificateEnabled: boolean;
-  };
-  createdAt: string; // ISO string
-  updatedAt: string; // ISO string
-  isActive: boolean;
-  isPublished: boolean;
+    randomizeQuestions: boolean
+    randomizeSections: boolean
+    showProgressBar: boolean
+    allowBackNavigation: boolean
+    showQuestionNumbers: boolean
+    autoSave: boolean
+    preventCheating: boolean
+    fullScreenMode: boolean
+    passingScore: number
+    maxAttempts: number
+    showResultsImmediately: boolean
+    certificateEnabled: boolean
+  }
+  createdAt: string
+  updatedAt: string
+  isActive: boolean
+  isPublished: boolean
 }
 
 export default function NewExamPage() {
-  const router = useRouter();
-  const [activeTab, setActiveTab] = useState("basic");
+  const router = useRouter()
+  const [activeTab, setActiveTab] = useState("basic")
   const [examTemplate, setExamTemplate] = useState<ExamTemplate>({
-    id: `exam_${Date.now()}`, // Temporary client-side ID
+    id: `exam_${Date.now()}`,
     title: "",
     description: "",
     instructions: "",
@@ -133,13 +129,11 @@ export default function NewExamPage() {
     updatedAt: new Date().toISOString(),
     isActive: false,
     isPublished: false,
-  });
-
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [previewMode, setPreviewMode] = useState(false);
-  const [currentSection, setCurrentSection] = useState<ExamSection | null>(null);
-  const [currentQuestion, setCurrentQuestion] = useState<ExamQuestion | null>(null);
+  })
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [audioPlaying, setAudioPlaying] = useState<Record<string, boolean>>({})
+  const [audioElements, setAudioElements] = useState<Record<string, HTMLAudioElement>>({})
 
   // Question templates for quick creation
   const questionTemplates = {
@@ -147,7 +141,7 @@ export default function NewExamPage() {
       type: "multiple-choice" as const,
       question: "",
       options: ["Option A", "Option B", "Option C", "Option D"],
-      correctAnswer: "Option A",
+      correctAnswer: 0, // Use index instead of text
       points: 1,
       difficulty: "medium" as const,
       tags: [],
@@ -185,49 +179,87 @@ export default function NewExamPage() {
       difficulty: "hard" as const,
       tags: ["writing", "reflection"],
     },
-  };
+    audio: {
+      type: "audio" as const,
+      question: "Listen to the audio and write what you hear:",
+      correctAnswer: "",
+      points: 2,
+      difficulty: "medium" as const,
+      tags: ["listening"],
+      audioUrl: "",
+    },
+  }
+
+  const playAudio = (questionId: string, audioUrl: string) => {
+    // Stop all other audio first
+    Object.entries(audioElements).forEach(([id, audio]) => {
+      if (id !== questionId) {
+        audio.pause()
+        audio.currentTime = 0
+        setAudioPlaying((prev) => ({ ...prev, [id]: false }))
+      }
+    })
+
+    let audio = audioElements[questionId]
+    if (!audio) {
+      audio = new Audio(audioUrl)
+      audio.addEventListener("ended", () => {
+        setAudioPlaying((prev) => ({ ...prev, [questionId]: false }))
+      })
+      audio.addEventListener("error", () => {
+        toast.error("Failed to load audio")
+        setAudioPlaying((prev) => ({ ...prev, [questionId]: false }))
+      })
+      setAudioElements((prev) => ({ ...prev, [questionId]: audio }))
+    }
+
+    if (audioPlaying[questionId]) {
+      audio.pause()
+      setAudioPlaying((prev) => ({ ...prev, [questionId]: false }))
+    } else {
+      audio.play()
+      setAudioPlaying((prev) => ({ ...prev, [questionId]: true }))
+    }
+  }
 
   const addSection = () => {
     const newSection: ExamSection = {
-      id: `section_${Date.now()}`, // Temporary client-side ID
+      id: `section_${Date.now()}`,
       title: `Section ${examTemplate.sections.length + 1}`,
       description: "",
       instructions: "",
       maxPoints: 0,
       questions: [],
       randomizeQuestions: false,
-    };
+    }
     setExamTemplate((prev) => ({
       ...prev,
       sections: [...prev.sections, newSection],
-    }));
-    setCurrentSection(newSection);
-    setActiveTab("sections"); // Switch to sections tab
-  };
+    }))
+    setActiveTab("sections")
+  }
 
   const updateSection = (sectionId: string, updates: Partial<ExamSection>) => {
     setExamTemplate((prev) => ({
       ...prev,
       sections: prev.sections.map((section) => (section.id === sectionId ? { ...section, ...updates } : section)),
-    }));
-  };
+    }))
+  }
 
   const deleteSection = (sectionId: string) => {
     setExamTemplate((prev) => ({
       ...prev,
       sections: prev.sections.filter((section) => section.id !== sectionId),
-    }));
-    setCurrentSection(null);
-  };
+    }))
+  }
 
   const addQuestion = (sectionId: string, questionType: keyof typeof questionTemplates) => {
-    const template = questionTemplates[questionType];
+    const template = questionTemplates[questionType]
     const newQuestion: ExamQuestion = {
-      id: `question_${Date.now()}`, // Temporary client-side ID
+      id: `question_${Date.now()}`,
       ...template,
-      tags: template.tags || [], // Ensure tags is an array
-    };
-
+      tags: template.tags || [],
+    }
     setExamTemplate((prev) => ({
       ...prev,
       sections: prev.sections.map((section) =>
@@ -239,9 +271,8 @@ export default function NewExamPage() {
             }
           : section,
       ),
-    }));
-    setCurrentQuestion(newQuestion);
-  };
+    }))
+  }
 
   const updateQuestion = (sectionId: string, questionId: string, updates: Partial<ExamQuestion>) => {
     setExamTemplate((prev) => ({
@@ -253,11 +284,19 @@ export default function NewExamPage() {
               questions: section.questions.map((question) =>
                 question.id === questionId ? { ...question, ...updates } : question,
               ),
+              // Recalculate section max points when question points change
+              maxPoints:
+                updates.points !== undefined
+                  ? section.questions.reduce(
+                      (sum, q) => sum + (q.id === questionId ? updates.points || 1 : q.points),
+                      0,
+                    )
+                  : section.maxPoints,
             }
           : section,
       ),
-    }));
-  };
+    }))
+  }
 
   const deleteQuestion = (sectionId: string, questionId: string) => {
     setExamTemplate((prev) => ({
@@ -274,25 +313,23 @@ export default function NewExamPage() {
             }
           : section,
       ),
-    }));
-    setCurrentQuestion(null);
-  };
+    }))
+  }
 
   const duplicateQuestion = (sectionId: string, questionId: string) => {
-    const section = examTemplate.sections.find((s) => s.id === sectionId);
-    const question = section?.questions.find((q) => q.id === questionId);
+    const section = examTemplate.sections.find((s) => s.id === sectionId)
+    const question = section?.questions.find((q) => q.id === questionId)
     if (question) {
       const duplicatedQuestion: ExamQuestion = {
         ...question,
-        id: `question_${Date.now()}_copy`, // Unique ID for copy
+        id: `question_${Date.now()}_copy`,
         question: `${question.question} (Copy)`,
-      };
-      // Find the index to insert the duplicated question right after the original
-      const questionIndex = section!.questions.findIndex(q => q.id === questionId);
+      }
+      const questionIndex = section!.questions.findIndex((q) => q.id === questionId)
       if (questionIndex !== -1) {
-        setExamTemplate(prev => ({
+        setExamTemplate((prev) => ({
           ...prev,
-          sections: prev.sections.map(s =>
+          sections: prev.sections.map((s) =>
             s.id === sectionId
               ? {
                   ...s,
@@ -303,110 +340,145 @@ export default function NewExamPage() {
                   ],
                   maxPoints: s.maxPoints + duplicatedQuestion.points,
                 }
-              : s
-          )
-        }));
+              : s,
+          ),
+        }))
       }
     }
-  };
-
+  }
 
   const calculateTotalPoints = () => {
-    return examTemplate.sections.reduce((total, section) => total + section.maxPoints, 0);
-  };
+    return examTemplate.sections.reduce((total, section) => total + section.maxPoints, 0)
+  }
 
-  // Effect to update total points when sections or questions change
   useEffect(() => {
-    const totalPoints = calculateTotalPoints();
-    setExamTemplate((prev) => ({ ...prev, totalPoints }));
-  }, [examTemplate.sections]); // Depend on examTemplate.sections for updates
+    const totalPoints = calculateTotalPoints()
+    setExamTemplate((prev) => ({ ...prev, totalPoints }))
+  }, [examTemplate.sections])
 
   const saveExam = async (publish = false) => {
-    setError(null);
-    setSaving(true);
+    setError(null)
+    setSaving(true)
 
     if (!examTemplate.title.trim()) {
-      setError("Please enter an exam title.");
-      setSaving(false);
-      return;
+      setError("Please enter an exam title.")
+      setSaving(false)
+      return
     }
 
     if (examTemplate.sections.length === 0) {
-      setError("Please add at least one section to the exam.");
-      setSaving(false);
-      return;
+      setError("Please add at least one section to the exam.")
+      setSaving(false)
+      return
     }
 
-    // Validate sections and questions for minimum requirements if needed
     for (const section of examTemplate.sections) {
       if (!section.title.trim()) {
-        setError(`Section ${section.id} is missing a title.`);
-        setSaving(false);
-        return;
+        setError(`Section ${section.id} is missing a title.`)
+        setSaving(false)
+        return
       }
       if (section.questions.length === 0) {
-        setError(`Section "${section.title}" has no questions.`);
-        setSaving(false);
-        return;
+        setError(`Section "${section.title}" has no questions.`)
+        setSaving(false)
+        return
       }
       for (const question of section.questions) {
         if (!question.question.trim()) {
-          setError(`Question in section "${section.title}" is missing text.`);
-          setSaving(false);
-          return;
+          setError(`Question in section "${section.title}" is missing text.`)
+          setSaving(false)
+          return
         }
         if (question.type === "multiple-choice" && (!question.options || question.options.length < 2)) {
-          setError(`Multiple-choice question in section "${section.title}" needs at least 2 options.`);
-          setSaving(false);
-          return;
+          setError(`Multiple-choice question in section "${section.title}" needs at least 2 options.`)
+          setSaving(false)
+          return
         }
-        if (question.type === "multiple-choice" && !question.correctAnswer) {
-          setError(`Multiple-choice question in section "${section.title}" needs a correct answer.`);
-          setSaving(false);
-          return;
+        if (question.type === "multiple-choice" && question.correctAnswer === undefined) {
+          setError(`Multiple-choice question in section "${section.title}" needs a correct answer.`)
+          setSaving(false)
+          return
+        }
+        if (question.type === "audio" && !question.audioUrl) {
+          setError(`Audio question in section "${section.title}" needs an audio URL.`)
+          setSaving(false)
+          return
+        }
+        // Ensure correctAnswer is not null/undefined for any question type
+        if (question.correctAnswer === null || question.correctAnswer === undefined) {
+          setError(`Question in section "${section.title}" needs a correct answer.`)
+          setSaving(false)
+          return
         }
       }
     }
 
-    const totalPoints = calculateTotalPoints();
-    const updatedExam: ExamTemplate = {
-      ...examTemplate,
+    const totalPoints = calculateTotalPoints()
+
+    // Transform the data to match the backend API expectations
+    const examDataForAPI = {
+      title: examTemplate.title,
+      description: examTemplate.description,
+      instructions: examTemplate.instructions,
       totalPoints,
+      timeLimit: examTemplate.timeLimit,
       isPublished: publish,
-      updatedAt: new Date().toISOString(),
-    };
+      isActive: true,
+      settings: examTemplate.settings,
+      sections: examTemplate.sections.map((section) => ({
+        title: section.title,
+        description: section.description,
+        instructions: section.instructions,
+        timeLimit: section.timeLimit,
+        maxPoints: section.maxPoints,
+        randomizeQuestions: section.randomizeQuestions,
+        passingScore: section.passingScore,
+        questions: section.questions.map((question) => ({
+          type: question.type,
+          question: question.question,
+          question_ru: question.question_ru,
+          options: question.options ? JSON.stringify(question.options) : null,
+          correct_answer: JSON.stringify(question.correctAnswer), // Always stringify for consistency
+          points: question.points,
+          hint: question.hint,
+          explanation: question.explanation,
+          module_id: question.module_id,
+          difficulty: question.difficulty,
+          tags: question.tags,
+          audioUrl: question.audioUrl,
+        })),
+      })),
+    }
 
     try {
       const response = await fetch("/api/exam-templates", {
-        method: "POST", // Always POST for new exam templates
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(updatedExam),
-      });
+        body: JSON.stringify(examDataForAPI),
+      })
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to save exam template.");
+        const errorData = await response.json()
+        throw new Error(errorData.message || errorData.error || "Failed to save exam template.")
       }
 
-      toast.success(`Exam ${publish ? "published" : "saved"} successfully!`);
-      router.push("/admin/exam"); // Redirect to exam management page
+      toast.success(`Exam ${publish ? "published" : "saved"} successfully!`)
+      router.push("/admin/exam")
     } catch (err: any) {
-      console.error("Error saving exam:", err);
-      setError(err.message || "An unexpected error occurred while saving the exam.");
-      toast.error(`Failed to save exam: ${err.message}`);
+      console.error("Error saving exam:", err)
+      setError(err.message || "An unexpected error occurred while saving the exam.")
+      toast.error(`Failed to save exam: ${err.message}`)
     } finally {
-      setSaving(false);
+      setSaving(false)
     }
-  };
+  }
 
   const previewExam = () => {
-    // For preview, we'll use local storage to pass the current examTemplate state
-    // to the exam page. In a real app, you might save a temporary draft to DB.
-    localStorage.setItem("examPreview", JSON.stringify(examTemplate));
-    window.open("/exam?preview=true", "_blank"); // Open in new tab
-  };
+    localStorage.setItem("examPreview", JSON.stringify(examTemplate))
+    window.open("/exam?preview=true", "_blank")
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
@@ -542,7 +614,6 @@ export default function NewExamPage() {
                         />
                       </div>
                     </div>
-
                     <div className="space-y-2">
                       <Label htmlFor="description">Description</Label>
                       <Textarea
@@ -553,7 +624,6 @@ export default function NewExamPage() {
                         rows={3}
                       />
                     </div>
-
                     <div className="space-y-2">
                       <Label htmlFor="instructions">Instructions for Students</Label>
                       <Textarea
@@ -614,9 +684,6 @@ export default function NewExamPage() {
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                  <Button variant="outline" size="sm" onClick={() => setCurrentSection(section)}>
-                                    Edit
-                                  </Button>
                                   <AlertDialog>
                                     <AlertDialogTrigger asChild>
                                       <Button variant="outline" size="sm">
@@ -733,7 +800,7 @@ export default function NewExamPage() {
                                       onClick={() => addQuestion(section.id, type as keyof typeof questionTemplates)}
                                     >
                                       <Plus className="w-3 h-3 mr-1" />
-                                      {type.replace("-", " ")}
+                                      {type === "audio" ? "Audio" : type.replace("-", " ")}
                                     </Button>
                                   ))}
                                 </div>
@@ -751,7 +818,7 @@ export default function NewExamPage() {
                                         size="sm"
                                         onClick={() => addQuestion(section.id, type as keyof typeof questionTemplates)}
                                       >
-                                        Add {type.replace("-", " ")}
+                                        Add {type === "audio" ? "Audio" : type.replace("-", " ")}
                                       </Button>
                                     ))}
                                   </div>
@@ -770,8 +837,8 @@ export default function NewExamPage() {
                                                 question.difficulty === "easy"
                                                   ? "default"
                                                   : question.difficulty === "medium"
-                                                  ? "secondary"
-                                                  : "destructive"
+                                                    ? "secondary"
+                                                    : "destructive"
                                               }
                                             >
                                               {question.difficulty}
@@ -794,7 +861,6 @@ export default function NewExamPage() {
                                             </Button>
                                           </div>
                                         </div>
-
                                         <div className="space-y-3">
                                           <Textarea
                                             value={question.question}
@@ -805,6 +871,66 @@ export default function NewExamPage() {
                                             rows={2}
                                           />
 
+                                          {question.type === "audio" && (
+                                            <div className="space-y-3 p-4 bg-blue-50 rounded-lg border-2 border-blue-200">
+                                              <div className="flex items-center gap-2">
+                                                <Volume2 className="w-5 h-5 text-blue-600" />
+                                                <Label className="text-blue-800 font-medium">
+                                                  Audio Question Setup
+                                                </Label>
+                                              </div>
+
+                                              <div className="space-y-2">
+                                                <Label>Audio URL</Label>
+                                                <div className="flex gap-2">
+                                                  <Input
+                                                    value={question.audioUrl || ""}
+                                                    onChange={(e) =>
+                                                      updateQuestion(section.id, question.id, {
+                                                        audioUrl: e.target.value,
+                                                      })
+                                                    }
+                                                    placeholder="https://example.com/audio.mp3"
+                                                    className="flex-1"
+                                                  />
+                                                  <Button variant="outline" size="sm">
+                                                    <Upload className="w-4 h-4" />
+                                                  </Button>
+                                                  {question.audioUrl && (
+                                                    <Button
+                                                      variant="outline"
+                                                      size="sm"
+                                                      onClick={() => playAudio(question.id, question.audioUrl!)}
+                                                    >
+                                                      {audioPlaying[question.id] ? (
+                                                        <Pause className="w-4 h-4" />
+                                                      ) : (
+                                                        <Play className="w-4 h-4" />
+                                                      )}
+                                                    </Button>
+                                                  )}
+                                                </div>
+                                              </div>
+
+                                              <div className="space-y-2">
+                                                <Label>Expected Answer/Transcription</Label>
+                                                <Input
+                                                  value={question.correctAnswer as string}
+                                                  onChange={(e) =>
+                                                    updateQuestion(section.id, question.id, {
+                                                      correctAnswer: e.target.value,
+                                                    })
+                                                  }
+                                                  placeholder="What students should hear and type"
+                                                />
+                                                <p className="text-sm text-blue-600">
+                                                  Students will listen to the audio and provide their answer in a text
+                                                  field.
+                                                </p>
+                                              </div>
+                                            </div>
+                                          )}
+
                                           {question.type === "multiple-choice" && question.options && (
                                             <div className="space-y-2">
                                               <Label>Answer Options</Label>
@@ -813,22 +939,26 @@ export default function NewExamPage() {
                                                   <Input
                                                     value={option}
                                                     onChange={(e) => {
-                                                      const newOptions = [...question.options!];
-                                                      newOptions[optionIndex] = e.target.value;
-                                                      updateQuestion(section.id, question.id, { options: newOptions });
+                                                      const newOptions = [...question.options!]
+                                                      newOptions[optionIndex] = e.target.value
+                                                      updateQuestion(section.id, question.id, { options: newOptions })
                                                     }}
                                                     placeholder={`Option ${String.fromCharCode(65 + optionIndex)}`}
                                                   />
                                                   <Button
-                                                    variant={question.correctAnswer === option ? "default" : "outline"}
+                                                    variant={
+                                                      question.correctAnswer === optionIndex ? "default" : "outline"
+                                                    }
                                                     size="sm"
                                                     onClick={() =>
                                                       updateQuestion(section.id, question.id, {
-                                                        correctAnswer: option,
+                                                        correctAnswer: optionIndex, // Store as index
                                                       })
                                                     }
                                                   >
-                                                    Correct
+                                                    {question.correctAnswer === optionIndex
+                                                      ? "✓ Correct"
+                                                      : "Set Correct"}
                                                   </Button>
                                                 </div>
                                               ))}
@@ -861,7 +991,7 @@ export default function NewExamPage() {
                                                     updateQuestion(section.id, question.id, { correctAnswer: true })
                                                   }
                                                 >
-                                                  True
+                                                  {question.correctAnswer === true ? "✓ True" : "True"}
                                                 </Button>
                                                 <Button
                                                   variant={question.correctAnswer === false ? "default" : "outline"}
@@ -870,7 +1000,7 @@ export default function NewExamPage() {
                                                     updateQuestion(section.id, question.id, { correctAnswer: false })
                                                   }
                                                 >
-                                                  False
+                                                  {question.correctAnswer === false ? "✓ False" : "False"}
                                                 </Button>
                                               </div>
                                             </div>
@@ -912,9 +1042,11 @@ export default function NewExamPage() {
                                             <div className="space-y-2">
                                               <Label>Module</Label>
                                               <Input
-                                                value={question.module || ""}
+                                                value={question.module_id || ""}
                                                 onChange={(e) =>
-                                                  updateQuestion(section.id, question.id, { module: e.target.value })
+                                                  updateQuestion(section.id, question.id, {
+                                                    module_id: Number.parseInt(e.target.value) || undefined,
+                                                  })
                                                 }
                                                 placeholder="e.g., Module 12"
                                               />
@@ -933,34 +1065,32 @@ export default function NewExamPage() {
                                             </div>
                                           </div>
 
-                                          {(question.hint || question.explanation) && (
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                              <div className="space-y-2">
-                                                <Label>Hint (optional)</Label>
-                                                <Textarea
-                                                  value={question.hint || ""}
-                                                  onChange={(e) =>
-                                                    updateQuestion(section.id, question.id, { hint: e.target.value })
-                                                  }
-                                                  placeholder="Provide a helpful hint"
-                                                  rows={2}
-                                                />
-                                              </div>
-                                              <div className="space-y-2">
-                                                <Label>Explanation (optional)</Label>
-                                                <Textarea
-                                                  value={question.explanation || ""}
-                                                  onChange={(e) =>
-                                                    updateQuestion(section.id, question.id, {
-                                                      explanation: e.target.value,
-                                                    })
-                                                  }
-                                                  placeholder="Explain the correct answer"
-                                                  rows={2}
-                                                />
-                                              </div>
+                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="space-y-2">
+                                              <Label>Hint (optional)</Label>
+                                              <Textarea
+                                                value={question.hint || ""}
+                                                onChange={(e) =>
+                                                  updateQuestion(section.id, question.id, { hint: e.target.value })
+                                                }
+                                                placeholder="Provide a helpful hint"
+                                                rows={2}
+                                              />
                                             </div>
-                                          )}
+                                            <div className="space-y-2">
+                                              <Label>Explanation (optional)</Label>
+                                              <Textarea
+                                                value={question.explanation || ""}
+                                                onChange={(e) =>
+                                                  updateQuestion(section.id, question.id, {
+                                                    explanation: e.target.value,
+                                                  })
+                                                }
+                                                placeholder="Explain the correct answer"
+                                                rows={2}
+                                              />
+                                            </div>
+                                          </div>
                                         </div>
                                       </CardContent>
                                     </Card>
@@ -1237,7 +1367,7 @@ export default function NewExamPage() {
                   onClick={() => saveExam(false)}
                   disabled={saving}
                 >
-                  <Save className="w-4 h-4 mr-2" />
+                  <FileText className="w-4 h-4 mr-2" />
                   Save as Draft
                 </Button>
                 <Button
@@ -1282,11 +1412,15 @@ export default function NewExamPage() {
                   <div className="w-2 h-2 bg-orange-500 rounded-full mt-2 flex-shrink-0"></div>
                   <p>Preview your exam before publishing to students</p>
                 </div>
+                <div className="flex items-start gap-2">
+                  <div className="w-2 h-2 bg-red-500 rounded-full mt-2 flex-shrink-0"></div>
+                  <p>Audio questions require valid URLs and expected answers</p>
+                </div>
               </CardContent>
             </Card>
           </div>
         </div>
       </div>
     </div>
-  );
+  )
 }

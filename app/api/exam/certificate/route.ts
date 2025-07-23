@@ -1,57 +1,40 @@
-import { NextResponse } from 'next/server';
-import { PrismaClient } from '@/lib/generated/prisma';
-import { getCurrentUser } from '@/src/lib/auth';
-const prisma = new PrismaClient();
-export async function GET(request: Request) {
+import { NextResponse } from "next/server"
+import { PrismaClient } from "@/lib/generated/prisma"
+
+const prisma = new PrismaClient()
+
+export async function POST(request: Request) {
   try {
-    const user = await getCurrentUser();
-    if (!user) {
-      console.log('No authenticated user');
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const { studentId, examId, studentName, studentEmail, score, completedModules, completedAt, certificateNumber } =
+      await request.json()
 
-    const { searchParams } = new URL(request.url);
-    const studentId = parseInt(searchParams.get('studentId') || '0');
-    const examId = parseInt(searchParams.get('examId') || '0');
-
-    if (studentId !== user.id) {
-      console.log('Unauthorized access attempt', { studentId, userId: user.id });
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
-    }
-
-    const certificate = await prisma.certificate.findFirst({
-      where: {
+    // Create certificate record
+    const certificate = await prisma.certificate.create({
+      data: {
         student_id: studentId,
-        exam_template_id: examId,
+        exam_id: examId,
+        student_name: studentName,
+        student_email: studentEmail,
+        score: score,
+        completed_modules: completedModules,
+        completed_at: new Date(completedAt),
+        generated_at: new Date(),
+        certificate_number: certificateNumber,
+        created_at: new Date(),
+        updated_at: new Date(),
       },
-      orderBy: { generated_at: 'desc' },
-    });
-
-    if (!certificate) {
-      console.log('No certificate found', { studentId, examId });
-      return NextResponse.json({ error: 'No certificate found' }, { status: 404 });
-    }
+    })
 
     return NextResponse.json({
-      student_name: certificate.student_name,
-      student_email: certificate.student_email,
-      score: certificate.score,
-      completed_modules: certificate.completed_modules,
-      completed_at: certificate.completed_at,
-      generated_at: certificate.generated_at,
-    });
-  } catch (error: any) {
-    console.error('Error fetching certificate:', {
-      message: error.message,
-      stack: error.stack,
-      databaseUrl: process.env.DATABASE_URL?.replace(/:\/\//g, '://<redacted>@'),
-    });
+      id: certificate.id,
+      message: "Certificate generated successfully!",
+      certificateNumber: certificate.certificate_number,
+    })
+  } catch (error) {
+    console.error("Error generating certificate:", error)
     return NextResponse.json(
-      {
-        error: 'Failed to fetch certificate',
-        details: error.message.includes('connect') ? 'Database connection failed' : error.message,
-      },
+      { message: "Failed to generate certificate.", error: (error as Error).message },
       { status: 500 },
-    );
+    )
   }
 }
